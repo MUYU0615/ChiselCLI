@@ -132,12 +132,12 @@ public class CodeIndex {
                 @Override
                 public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
                     String dirName = dir.getFileName().toString();
-                    // 跳过常见非代码目录
+                    // 跳过常见非代码目录 + 测试目录（测试代码会污染检索结果：挤占生产代码排名）
                     if (dirName.equals("node_modules") || dirName.equals("target")
                             || dirName.equals("build") || dirName.equals(".git")
                             || dirName.equals(".idea") || dirName.equals(".vscode")
                             || dirName.equals("dist") || dirName.equals("out")
-                            || dirName.startsWith(".")) {
+                            || dirName.equals("test") || dirName.startsWith(".")) {
                         return FileVisitResult.SKIP_SUBTREE;
                     }
                     return FileVisitResult.CONTINUE;

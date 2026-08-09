@@ -45,19 +45,23 @@ public class CodeRetriever implements AutoCloseable {
     }
 
     /**
-     * 混合检索：同时进行语义检索和关键词检索，合并去重
+     * 混合检索：同时进行语义检索和关键词检索，合并去重。
+     *
+     * 排序原则：**符号精确命中（关键词路径）优先于语义近似**——
+     * 模型若能在查询里带上猜到的符号名（如 stagnant / refresh），
+     * 该符号所在代码块是比语义相似更强的信号，不能被语义高分结果淹没。
      */
     public List<VectorStore.SearchResult> hybridSearch(String query, int topK) throws Exception {
         Map<String, VectorStore.SearchResult> merged = new LinkedHashMap<>();
         Set<String> dualMatchBonused = new HashSet<>();
 
-        // 1. 语义检索
+        // 1. 语义检索：取 topK*2 候选（弱向量下语义区分度有限，少取避免无关结果挤占）
         int semanticLimit = Math.max(topK * 2, 10);
         for (VectorStore.SearchResult result : semanticSearch(query, semanticLimit)) {
             mergeResult(merged, result, dualMatchBonused);
         }
 
-        // 2. 关键词检索
+        // 2. 关键词检索：符号精确命中直接给高权重，进 merged 后排序靠前
         Set<String> keywords = RagQueryTokenizer.tokenize(query);
         for (String keyword : keywords) {
             for (VectorStore.SearchResult result : keywordSearch(keyword)) {
@@ -78,7 +82,7 @@ public class CodeRetriever implements AutoCloseable {
         }
 
         ranked.sort(Comparator.comparingDouble(VectorStore.SearchResult::similarity).reversed());
-        return limitPerFile(ranked, topK, 2);
+        return limitPerFile(ranked, topK, 3);
     }
 
     private void mergeResult(Map<String, VectorStore.SearchResult> merged, VectorStore.SearchResult candidate,
@@ -106,16 +110,23 @@ public class CodeRetriever implements AutoCloseable {
         String contentLower = result.content().toLowerCase();
         String keywordLower = keyword.toLowerCase();
 
-        // 加分幅度控制在 0.1~0.5，确保关键词结果（base 0.3）最高到 ~0.8，不会压过语义结果（max 1.0）
+        // 符号精确命中是最强信号：
+        // - name 命中（类名/方法名含关键词）：权重最高，几乎必然进 TopK
+        // - content 命中（代码体/注释含关键词，如 stagnant 字段、pending 字段）：也应显著高于纯语义
+        // 中文关键词更泛（"工具""调用"在大量代码注释里出现），content boost 只给英文符号一半权重，
+        // 避免泛中文词大面积误命中把真正的符号命中挤到同分并列。
+        boolean pureHanKeyword = keywordLower.codePoints()
+                .allMatch(cp -> Character.UnicodeScript.of(cp) == Character.UnicodeScript.HAN);
+        double contentBoost = pureHanKeyword ? 0.4 : 0.8;
+
         double bonus = 0.0;
         if (nameLower.contains(keywordLower)) {
-            bonus += 0.3;  // 类名/方法名精确命中是最强信号
+            bonus += 1.0;  // 方法名/类名精确命中
+        } else if (contentLower.contains(keywordLower)) {
+            bonus += contentBoost;  // 方法体/注释含关键词：比纯语义强，但泛中文词减半
         }
         if (fileLower.contains(keywordLower)) {
-            bonus += 0.1;
-        }
-        if (contentLower.contains(keywordLower)) {
-            bonus += 0.1;
+            bonus += 0.2;
         }
 
         return new VectorStore.SearchResult(

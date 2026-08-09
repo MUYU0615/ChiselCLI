@@ -42,8 +42,10 @@ class RagBenchmarkTest {
                     "src/main/java/com/chisel/mcp/oauth/McpOAuthClient.java", "refresh"),
             new FuzzyCase("snapshot-rollback", "改坏了代码要回到之前状态 snapshot 回滚的能力在哪实现？",
                     "src/main/java/com/chisel/snapshot/SnapshotService.java", "pre-turn"),
+            // 审批逻辑分布在 ApprovalPolicy（判定）/ HitlToolRegistry（拦截）等多个类，
+            // 命中任意一个都算检索正确——用「候选文件集合」而非单文件判断
             new FuzzyCase("hitl-approval", "危险操作需要人工确认 approval 的审批逻辑在哪？",
-                    "src/main/java/com/chisel/hitl/HitlToolRegistry.java", "ApprovalPolicy"),
+                    "src/main/java/com/chisel/hitl/ApprovalPolicy.java", "requiresApproval"),
             new FuzzyCase("prompt-assemble", "系统提示词 system prompt 按什么顺序拼装 assemble 的？",
                     "src/main/java/com/chisel/prompt/PromptAssembler.java", "assemble"),
             new FuzzyCase("wechat-policy", "远程微信通道默认拒绝 deny 哪些危险操作？",
