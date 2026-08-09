@@ -68,7 +68,7 @@ public class CodeIndex {
         collectFiles(root, filesToIndex);
         emit("📁 发现 " + filesToIndex.size() + " 个文件待索引");
 
-        List<VectorStore.CodeChunkEntry> entries = new ArrayList<>();
+        List<CodeChunk> pendingChunks = new ArrayList<>();
         List<CodeRelation> allRelations = new ArrayList<>();
 
         int processed = 0;
@@ -81,14 +81,9 @@ public class CodeIndex {
             }
 
             try {
-                // 1. 分块
+                // 1. 分块（embedding 移到文件循环外批量处理，减少 API 调用次数）
                 List<CodeChunk> chunks = chunker.chunkFile(file);
-
-                // 2. 生成 Embedding 并组装条目
-                for (CodeChunk chunk : chunks) {
-                    float[] embedding = embeddingClient.embed(chunk.toEmbeddingText());
-                    entries.add(new VectorStore.CodeChunkEntry(chunk, embedding));
-                }
+                pendingChunks.addAll(chunks);
 
                 // 3. 分析关系（仅 Java 文件）
                 if (file.toString().endsWith(".java")) {
@@ -98,6 +93,27 @@ public class CodeIndex {
                 String message = "   ⚠️ 索引失败: " + file + " - " + e.getMessage();
                 emit(message);
                 log.warn("code index failed for file {}", file, e);
+            }
+        }
+
+        // 2. 批量生成 Embedding（OpenAI 兼容 API 一次可处理多文本；Ollama 退化为逐条）
+        List<VectorStore.CodeChunkEntry> entries = new ArrayList<>();
+        int batchSize = 32;
+        for (int i = 0; i < pendingChunks.size(); i += batchSize) {
+            List<CodeChunk> batch = pendingChunks.subList(i, Math.min(i + batchSize, pendingChunks.size()));
+            try {
+                List<String> texts = batch.stream().map(CodeChunk::toEmbeddingText).toList();
+                List<float[]> embeddings = embeddingClient.embedBatch(texts);
+                for (int j = 0; j < batch.size() && j < embeddings.size(); j++) {
+                    entries.add(new VectorStore.CodeChunkEntry(batch.get(j), embeddings.get(j)));
+                }
+            } catch (Exception e) {
+                // 单个批次 embedding 失败（限流/超时）：跳过该批，不中断整个索引
+                log.warn("embedding batch failed for {} chunks: {}", batch.size(), e.getMessage());
+            }
+            int processedEmbed = Math.min(i + batchSize, pendingChunks.size());
+            if (processedEmbed % 200 == 0 || processedEmbed == pendingChunks.size()) {
+                emit(String.format("   向量化: %d/%d", processedEmbed, pendingChunks.size()));
             }
         }
 

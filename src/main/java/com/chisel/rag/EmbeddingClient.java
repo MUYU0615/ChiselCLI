@@ -2,10 +2,13 @@ package com.chisel.rag;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import okhttp3.*;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -80,6 +83,54 @@ public class EmbeddingClient {
             embedding[i] = (float) embeddingNode.get(i).asDouble();
         }
         return embedding;
+    }
+
+    /**
+     * 批量获取文本向量（OpenAI 兼容 API 支持 input 数组，一次请求多文本，
+     * 大幅减少索引时的 HTTP 调用次数——2300 块逐条约 7 分钟，批量 32 条/次约 30 秒）。
+     * Ollama 本地路径退化为逐条（本地快，无需批量）。
+     */
+    public List<float[]> embedBatch(List<String> texts) throws IOException {
+        List<float[]> result = new ArrayList<>();
+        if (texts == null || texts.isEmpty()) {
+            return result;
+        }
+        if ("openai".equals(provider.toLowerCase()) || "zhipu".equals(provider.toLowerCase())
+                || "glm".equals(provider.toLowerCase())) {
+            String url = baseUrl + "/embeddings";
+            ObjectNode requestBody = mapper.createObjectNode();
+            requestBody.put("model", model);
+            ArrayNode inputs = requestBody.putArray("input");
+            for (String text : texts) {
+                inputs.add(text == null || text.length() > MAX_INPUT_CHARS
+                        ? text.substring(0, MAX_INPUT_CHARS)
+                        : text);
+            }
+            String responseBody = postJson(url, requestBody.toString(), true);
+            JsonNode root = mapper.readTree(responseBody);
+            JsonNode data = root.path("data");
+            if (!data.isArray() || data.isEmpty()) {
+                throw new IOException("API 返回的 embedding 格式不正确: " + responseBody);
+            }
+            // 按 index 排序，保证返回顺序与输入一致
+            List<JsonNode> ordered = new ArrayList<>();
+            data.forEach(ordered::add);
+            ordered.sort(java.util.Comparator.comparingInt(n -> n.path("index").asInt(0)));
+            for (JsonNode item : ordered) {
+                JsonNode embeddingNode = item.path("embedding");
+                float[] embedding = new float[embeddingNode.size()];
+                for (int i = 0; i < embeddingNode.size(); i++) {
+                    embedding[i] = (float) embeddingNode.get(i).asDouble();
+                }
+                result.add(embedding);
+            }
+            return result;
+        }
+        // 非 OpenAI 兼容（如 Ollama）：逐条 embed
+        for (String text : texts) {
+            result.add(embed(text));
+        }
+        return result;
     }
 
     private float[] embedOpenAICompatible(String text) throws IOException {
