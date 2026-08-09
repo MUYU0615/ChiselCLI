@@ -38,5 +38,45 @@
     "glob": "**/ToolRegistry.java",
     "expectedPath": "src/main/java/com/chisel/tool/ToolRegistry.java",
     "expectedText": "tools.put(\"grep_code\""
+  },
+  {
+    "id": "lsp-diagnostic-flush",
+    "question": "LSP 诊断是在哪一轮 LLM 请求前注入到对话的？",
+    "pattern": "injectPendingLspDiagnostics",
+    "glob": "**/Agent.java",
+    "expectedPath": "src/main/java/com/chisel/agent/Agent.java",
+    "expectedText": "injectPendingLspDiagnostics()"
+  },
+  {
+    "id": "hitl-policy-order",
+    "question": "微信通道的 execute_command 默认拒绝策略在哪里实现？",
+    "pattern": "微信通道默认拒绝 execute_command",
+    "glob": "**/WechatPolicyDecider.java",
+    "expectedPath": "src/main/java/com/chisel/wechat/WechatPolicyDecider.java",
+    "expectedText": "微信通道默认拒绝 execute_command；请在 setup 策略中配置命令白名单后重试"
+  },
+  {
+    "id": "oauth-challenge-parse",
+    "question": "WWW-Authenticate 挑战头在哪里解析成 OAuthChallenge？",
+    "pattern": "class OAuthChallenge",
+    "glob": "**/OAuthChallenge.java",
+    "expectedPath": "src/main/java/com/chisel/mcp/oauth/OAuthChallenge.java",
+    "expectedText": "public final class OAuthChallenge"
+  },
+  {
+    "id": "jsonrpc-pending-pair",
+    "question": "JSON-RPC 请求响应的 id 配对是用什么并发结构维护的？",
+    "pattern": "ConcurrentHashMap<Long, CompletableFuture<JsonNode>> pending",
+    "glob": "**/JsonRpcClient.java",
+    "expectedPath": "src/main/java/com/chisel/mcp/jsonrpc/JsonRpcClient.java",
+    "expectedText": "pending"
+  },
+  {
+    "id": "snapshot-turn-commit",
+    "question": "pre-turn 快照的 commit message 标记是什么？",
+    "pattern": "pre-turn",
+    "glob": "**/SnapshotService.java",
+    "expectedPath": "src/main/java/com/chisel/snapshot/SnapshotService.java",
+    "expectedText": "pre-turn"
   }
 ]

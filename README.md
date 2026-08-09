@@ -74,8 +74,11 @@ mvn test -Pphase16-smoke
 # 常规快速回归，跳过外部进程 / 网络超时 / 命令超时类慢测试
 mvn test -Pquick
 
-# 代码搜索 deterministic golden set
+# 代码搜索 deterministic golden set（10 例，产出命中率/耗时基准报告到 target/benchmark/）
 mvn test -Dtest=CodeSearchGoldenSetTest -DskipTests=false
+
+# RAG 语义检索基准（模糊查询对比 search_code vs grep_code，需本地 embedding 服务在线）
+mvn test -Dtest=RagBenchmarkTest -DskipTests=false
 
 # 发版或大范围重构前再跑全量
 mvn test -DskipTests=false

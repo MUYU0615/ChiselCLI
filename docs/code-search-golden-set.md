@@ -41,12 +41,24 @@ mvn test -Dtest=CodeSearchGoldenSetTest -DskipTests=false
 
 `pattern` 应该能代表 Agent 在第一轮会提取出的明确符号、字符串或文案。若问题只能靠模糊语义定位，先不要放进这个 deterministic golden set，应单独进入 `search_code` / RAG fallback 评测。
 
-## 后续指标
+## 基准指标（已落地）
 
-这个测试先保证 correctness。后续可以在独立 benchmark 中补充：
+`CodeSearchGoldenSetTest` 现在同时产出量化报告到 `target/benchmark/code-search-benchmark.md`：
 
-- P50 / P95 搜索耗时
-- 命中文件排名
-- 三轮内是否读到正确代码段
-- grep/read 总字符量或 token 估算
-- 是否错误优先调用 `search_code`
+- **命中率**：grep 定位到预期 `文件:行号` 的用例占比（golden set 10 例，硬性要求 100%）
+- **输出预算内占比**：grep 结果 ≤ 6000 chars 的用例占比（硬性要求 100%）
+- **耗时分布**：单用例 grep+read 总耗时 P50 / P95
+
+当前基准（2025-08 实测）：命中率 10/10 = 100%，P50 ≈ 8ms，P95 ≈ 35ms。
+
+## RAG 语义检索基准（RagBenchmarkTest）
+
+`search_code` 面向「模型不知道确切符号、只能描述意图」的模糊查询。`RagBenchmarkTest`
+用 8 个模糊问题对比两条链路，报告写到 `target/benchmark/rag-benchmark.md`：
+
+- `search_code`（RAG 混合检索：Embedding + 关键词 + 加分重排）
+- `grep_code`（用查询里的英文 token 当关键词）
+
+当前基准（2025-08 实测，本地弱向量模型）：RAG 命中率 4/8 = 50%，grep 命中率 2/8 = 25%；
+RAG 单独命中的用例（JSON-RPC 配对 / 快照回滚 / 微信策略）均为 grep 完全失败、只能靠语义定位的场景。
+真实 embedding 模型（如 nomic-embed-text）下命中率会更高，本基准给出的是保守下限。
