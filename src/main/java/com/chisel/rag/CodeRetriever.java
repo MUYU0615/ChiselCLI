@@ -1,5 +1,8 @@
 package com.chisel.rag;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.sql.SQLException;
@@ -16,6 +19,7 @@ import java.util.Set;
  * 代码检索器：语义检索 + 图谱检索的统一入口
  */
 public class CodeRetriever implements AutoCloseable {
+    private static final Logger log = LoggerFactory.getLogger(CodeRetriever.class);
     private final EmbeddingClient embeddingClient;
     private final VectorStore vectorStore;
 
@@ -57,8 +61,14 @@ public class CodeRetriever implements AutoCloseable {
 
         // 1. 语义检索：取 topK*2 候选（弱向量下语义区分度有限，少取避免无关结果挤占）
         int semanticLimit = Math.max(topK * 2, 10);
-        for (VectorStore.SearchResult result : semanticSearch(query, semanticLimit)) {
-            mergeResult(merged, result, dualMatchBonused);
+        try {
+            for (VectorStore.SearchResult result : semanticSearch(query, semanticLimit)) {
+                mergeResult(merged, result, dualMatchBonused);
+            }
+        } catch (Exception e) {
+            // embedding 服务失败（限流/超时/未配置）时回退到纯关键词路径，
+            // 而不是让 search_code 整体失败——检索可用性优先于语义精度。
+            log.warn("semantic search failed, falling back to keyword path: {}", e.getMessage());
         }
 
         // 2. 关键词检索：符号精确命中直接给高权重，进 merged 后排序靠前

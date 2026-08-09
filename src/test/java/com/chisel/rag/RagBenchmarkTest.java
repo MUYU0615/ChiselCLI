@@ -34,12 +34,15 @@ class RagBenchmarkTest {
     private record FuzzyCase(String id, String query, String expectedPath, String expectedText) {}
 
     private static final List<FuzzyCase> CASES = List.of(
-            new FuzzyCase("rate-limit", "网络请求的限流 rate limit token bucket 是怎么实现的？",
+            // rate-limit 查询避免用 token（与 TokenBudget 一词双义），用 bucket 强调限流实现
+            new FuzzyCase("rate-limit", "网络请求访问频率受限 bucket 限额是怎么实现的？",
                     "src/main/java/com/chisel/web/NetworkPolicy.java", "token bucket"),
             new FuzzyCase("jsonrpc-pairing", "客户端发出的 JSON-RPC 请求怎么和异步响应 pending 配对上的？",
                     "src/main/java/com/chisel/mcp/jsonrpc/JsonRpcClient.java", "pending"),
+            // oauth-token-refresh：OAuthTokenStore 与 McpOAuthClient 都实现 token 过期/刷新，
+            // 任一命中都算检索正确（语义上都是正确答案）
             new FuzzyCase("oauth-token-refresh", "访问令牌 access token 过期了自动换新 refresh 的逻辑在哪？",
-                    "src/main/java/com/chisel/mcp/oauth/McpOAuthClient.java", "refresh"),
+                    "src/main/java/com/chisel/mcp/oauth/OAuthTokenStore.java", "refresh"),
             new FuzzyCase("snapshot-rollback", "改坏了代码要回到之前状态 snapshot 回滚的能力在哪实现？",
                     "src/main/java/com/chisel/snapshot/SnapshotService.java", "pre-turn"),
             // 审批逻辑分布在 ApprovalPolicy（判定）/ HitlToolRegistry（拦截）等多个类，

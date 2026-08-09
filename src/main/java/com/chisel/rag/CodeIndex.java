@@ -108,6 +108,17 @@ public class CodeIndex {
             store.insertRelations(allRelations);
 
             VectorStore.IndexStats stats = store.getStats();
+            // 失败兜底：分块数 > 0 但 embedding 全部失败（如 embed 服务限流/超时）时，
+            // 索引结果没有可用向量，检索会退化成关键词路径——必须显式报错而不是静默"成功"。
+            if (filesToIndex.isEmpty()) {
+                return new IndexResult(0, 0, "未发现可索引的代码文件: " + root);
+            }
+            if (stats.chunkCount() == 0 && !filesToIndex.isEmpty()) {
+                String error = "索引失败：所有代码块的 embedding 生成失败（检查 embedding 服务与 API Key）";
+                emit("❌ " + error);
+                log.warn("code index failed for root {}: all chunks embed failed", root);
+                return new IndexResult(0, 0, error);
+            }
             String msg = String.format("索引完成：%d 个代码块，%d 条关系", stats.chunkCount(), stats.relationCount());
             emit("✅ " + msg);
             return new IndexResult(stats.chunkCount(), stats.relationCount(), msg);
