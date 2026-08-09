@@ -44,7 +44,7 @@ Terminal
 
 - 默认 CLI 路径尽早创建 JLine `Terminal`、`LineReader` 和 `Renderer`，启动期输出不再先裸写 `System.out`。
 - Banner、模型加载、MCP 启动、Skill summary、ReAct 提示、退出提示走 `Renderer.stream()`。
-- 开屏改为 π 主题彩色 logo + Qoder 风格首屏；MCP/Skill 初始化完成后一次性展示模型、MCP、Skill、ReAct 状态和三条 getting-started tips。
+- 开屏改为凿子（Chisel）主题彩色 logo + Qoder 风格首屏；MCP/Skill 初始化完成后一次性展示模型、MCP、Skill、ReAct 状态和三条 getting-started tips。
 - `InlineRenderer` 增加 `bindLineReader(LineReader)`。
 - `InlineRenderer.stream()` 在 `LineReader.isReading()` 时使用 `LineReader#printAbove`。
 - 未绑定 LineReader、非读取态、plain/test 路径继续走原 `PrintStream`。

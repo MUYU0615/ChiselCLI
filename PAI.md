@@ -6,6 +6,22 @@
 - 常规回归：`mvn test -Pquick`；TUI 相关跑 `mvn test -Pphase16-smoke`。
 - 针对性测试：`mvn test -Dtest=XxxTest -DskipTests=false`。
 
+## Dev Environment（2025-08 搭建，换机器/换线程先看这里）
+
+- 仓库目录：`~/Documents/Project/chisel`。
+- Java：Temurin JDK 17，位于 `~/tools/jdk-17.0.20+8/Contents/Home`（`~/.zshrc` 已配 `JAVA_HOME`）。
+- Maven：3.9.16，位于 `~/tools/apache-maven-3.9.16`（`~/.zshrc` 已配 PATH）；依赖走阿里云镜像（`~/.m2/settings.xml`）。
+- 跑测试两个前提，否则会红：
+  1. `NO_COLOR=1`（否则 TerminalMarkdownRenderer 断言失败，ANSI 码计入行长）。
+  2. 本地 embedding 服务在线（否则 CodeIndex 索引 0 块）：`python3 /tmp/fake_ollama.py &`（监听 11434，返回固定向量）。
+- 全量回归：`NO_COLOR=1 mvn test -Pquick`（770 个测试全绿基线）。
+
+## Project Identity（2025-08 确立）
+
+- ChiselCLI 是独立开发的 Java Agent CLI 产品：包 `com.chisel`，banner `v0.1.0`，配置目录 `~/.chisel/`，环境变量 `CHISEL_*`，logo 为凿子（Chisel）主题。
+- Git 历史：单 commit，作者 Andy_Muyu，无 remote。
+- 定位：面向商业使用的 Agent CLI，对标 Claude Code；能力清单见 AGENTS.md「已交付能力」。
+
 ## What This Is
 
 ChiselCLI 是面向商业使用的 Java Agent CLI 产品，对标 Claude Code；当前主路径是 ReAct、Plan-and-Execute、Multi-Agent 三套执行模式。

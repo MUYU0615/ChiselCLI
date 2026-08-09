@@ -12,9 +12,9 @@
 
 - 项目名：`ChiselCLI`
 - 定位：面向商业使用的 Java Agent CLI 产品，对标 Claude Code
-- 已交付能力：ReAct / Plan+DAG / Memory / RAG / Multi-Agent / HITL / 并行工具 / 多模型 / 联网 / MCP 核心 / MCP 高级 / 长上下文 / Chrome DevTools / CDP 会话复用 / Skill / TUI / LSP 诊断 / Side-Git 快照 / Prompt 分层 / Runtime API / 图片输入 / 微信 iLink 通道文本 MVP
+- 已交付能力：ReAct / Plan+DAG / Memory / RAG / Multi-Agent / HITL / 并行工具 / 多模型 / 联网 / MCP 核心 / MCP 高级 / 长上下文 / Chrome DevTools / CDP 会话复用 / Skill / TUI / LSP 诊断 / Side-Git 快照 / Prompt 分层 / Runtime API / 图片输入 / 微信 iLink 通道文本 MVP / MCP OAuth / MCP sampling / MCP server 自动重启
 - `PAI.md` 是 ChiselCLI 的项目级记忆文件：启动时自动注入 system prompt，适合团队共享的长期稳定规则；个人/会变化的经验继续用 `/save` 长期记忆。
-- 下一步：OAuth / sampling / recovery 作为后续 MCP 增强
+- 下一步：MCP roots 支持 / MCP 媒体内容（image/audio 完整链路）/ 微信通道媒体链路
 - Banner 版本：`v0.1.0`，Maven 产物：`chisel-1.0-SNAPSHOT.jar`（两者不一致是正常状态）
 
 ## 运行前提
@@ -94,7 +94,7 @@ src/main/java/com/chisel/
 
 启动与 inline 渲染当前约定：
 
-- 开屏 Banner 使用无右边框的简洁布局，避免 CJK/ANSI 字宽导致右侧竖线错位；Phase 22 后默认是 π 主题彩色 logo + Qoder 风格首屏，只展示模型、MCP、Skill、ReAct 状态和三条 getting-started tips，不再把 MCP server 明细刷成启动日志。
+- 开屏 Banner 使用无右边框的简洁布局，避免 CJK/ANSI 字宽导致右侧竖线错位；Phase 22 后默认是凿子（Chisel）主题彩色 logo + Qoder 风格首屏，只展示模型、MCP、Skill、ReAct 状态和三条 getting-started tips，不再把 MCP server 明细刷成启动日志。
 - inline 模式使用 JLine 4 的 LineReader 编辑能力，默认提示符是 `* `，右提示显示 `message / @path / @image`。
 - 默认 CLI 启动路径应先 `Renderer.start()` 并初始化底部 dock；inline 首屏不要在 `readLine` 前裸写 stdout，而是通过 `InlineRenderer.installStartupScreen(...)` 挂到 `LineReader.CALLBACK_INIT`，首次进入输入时用 `printAbove` 一次性显示完整 Banner + tips，避免 logo 被 LineReader 首次重绘滚出可视区域。
 - `BottomStatusBar` 现在是 JLine `Status` 托管的底部 dock：由 JLine 维护滚动区域和状态行位置，不再手写 `\n` / `moveUp` / `CLEAR_TO_EOS` 清屏。输入期会把 LineReader 光标定位到 dock 上方一行，让 `*` 输入行和 Status 同处底部区域；dock 保留两类信息：上层模式 + MCP/Skill 摘要，下层 Auto Model / model / phase / ctx 百分比与 token / cost / elapsed / cwd。关键字段可用克制的 JLine `AttributedString` 彩色样式突出，但纯文本格式和宽度裁剪逻辑要保持稳定。`ctx` 表示当前仍会带入下一轮请求的上下文估算；`in/out/cache` 表示最近任务的 LLM 调用统计，二者不要混用。
@@ -227,7 +227,7 @@ src/main/java/com/chisel/
 
 ## 当前已知边界
 
-以下在路线图但未交付：容器/VM 沙箱 / MCP OAuth + sampling + server 自动重启
+以下在路线图但未交付：容器/VM 沙箱 / MCP roots 支持 / MCP media content 完整链路 / MCP server health ping
 
 不要把 `ROADMAP.md` 中"将来要做"误读成"现在已有"。
 

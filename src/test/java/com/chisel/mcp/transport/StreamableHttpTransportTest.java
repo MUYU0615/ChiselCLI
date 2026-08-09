@@ -153,4 +153,67 @@ class StreamableHttpTransportTest {
         assertEquals("application/json, text/event-stream", req.getHeader("Accept"));
         assertNotNull(req.getHeader("MCP-Protocol-Version"), "必须发送协议版本 header");
     }
+
+    @Test
+    void sendsAuthorizationHeaderFromStoredToken() throws Exception {
+        server.enqueue(new MockResponse()
+                .setHeader("Content-Type", "application/json")
+                .setBody("{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}"));
+
+        java.nio.file.Path tokenFile = java.nio.file.Files.createTempFile("oauth", ".json");
+        com.chisel.mcp.oauth.OAuthTokenStore store = new com.chisel.mcp.oauth.OAuthTokenStore(tokenFile);
+        store.save("demo", "stored-access-token", "refresh", 3600, null);
+
+        StreamableHttpTransport transport = new StreamableHttpTransport(
+                server.url("/mcp").toString(), Map.of(), store, "demo");
+        transport.send(MAPPER.readTree("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"x\"}"));
+
+        RecordedRequest req = server.takeRequest();
+        assertEquals("Bearer stored-access-token", req.getHeader("Authorization"));
+    }
+
+    @Test
+    void noAuthHeaderWhenNoTokenStored() throws Exception {
+        server.enqueue(new MockResponse()
+                .setHeader("Content-Type", "application/json")
+                .setBody("{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}"));
+
+        java.nio.file.Path tokenFile = java.nio.file.Files.createTempFile("oauth", ".json");
+        com.chisel.mcp.oauth.OAuthTokenStore store = new com.chisel.mcp.oauth.OAuthTokenStore(tokenFile);
+
+        StreamableHttpTransport transport = new StreamableHttpTransport(
+                server.url("/mcp").toString(), Map.of(), store, "demo");
+        transport.send(MAPPER.readTree("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"x\"}"));
+
+        RecordedRequest req = server.takeRequest();
+        assertNull(req.getHeader("Authorization"));
+    }
+
+    @Test
+    void throwsOAuthRequiredWhen401WithoutRefreshToken() throws Exception {
+        server.enqueue(new MockResponse()
+                .setResponseCode(401)
+                .setHeader("WWW-Authenticate", "MCP-OAuth"));
+
+        java.nio.file.Path tokenFile = java.nio.file.Files.createTempFile("oauth", ".json");
+        com.chisel.mcp.oauth.OAuthTokenStore store = new com.chisel.mcp.oauth.OAuthTokenStore(tokenFile);
+
+        StreamableHttpTransport transport = new StreamableHttpTransport(
+                server.url("/mcp").toString(), Map.of(), store, "demo");
+
+        assertThrows(com.chisel.mcp.oauth.OAuthRequiredException.class,
+                () -> transport.send(MAPPER.readTree("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"x\"}")));
+    }
+
+    @Test
+    void plain401WithoutChallengeIsIOExceptionNotOAuth() throws Exception {
+        server.enqueue(new MockResponse().setResponseCode(401));
+
+        StreamableHttpTransport transport = new StreamableHttpTransport(
+                server.url("/mcp").toString(), Map.of());
+
+        IOException error = assertThrows(IOException.class,
+                () -> transport.send(MAPPER.readTree("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"x\"}")));
+        assertFalse(error instanceof com.chisel.mcp.oauth.OAuthRequiredException);
+    }
 }

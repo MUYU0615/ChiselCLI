@@ -14,6 +14,8 @@ public final class McpInitializeRequest {
         root.put("protocolVersion", PROTOCOL_VERSION);
         ObjectNode capabilities = root.putObject("capabilities");
         capabilities.putObject("tools");
+        // 声明 client 支持 sampling：允许 server 反向请求 client 用其 LLM 生成回复
+        capabilities.putObject("sampling");
         ObjectNode clientInfo = root.putObject("clientInfo");
         clientInfo.put("name", "chisel");
         clientInfo.put("version", "11.0.0");

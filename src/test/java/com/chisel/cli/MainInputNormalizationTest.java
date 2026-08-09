@@ -61,7 +61,8 @@ class MainInputNormalizationTest {
         assertTrue(lines.stream().anyMatch(line -> line.contains("ChiselCLI")));
         assertTrue(lines.stream().anyMatch(line -> line.contains("⚒")));
         assertTrue(lines.stream().anyMatch(line -> line.contains("v0.1.0")));
-        assertTrue(lines.stream().anyMatch(line -> line.contains("████████")));
+        assertTrue(lines.stream().anyMatch(line -> line.contains("██")),
+                "banner 应含凿子主题 logo");
         assertTrue(lines.stream().anyMatch(line -> line.contains("Tips for getting started")));
         assertTrue(lines.stream().anyMatch(line -> line.contains("@path")));
         assertTrue(lines.stream().noneMatch(line -> line.contains("for shortcuts")));

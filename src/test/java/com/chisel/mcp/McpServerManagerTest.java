@@ -192,6 +192,30 @@ class McpServerManagerTest {
         assertTrue(manager.logs("missing").contains("未找到"));
     }
 
+    @Test
+    void toolFailureAfterStartTriggersRecoveryRestart() throws Exception {
+        // 第一次启动成功
+        enqueueInitialize();
+        enqueueToolsList(toolJson("echo", "Echo"));
+        loadServersFromMap(Map.of("demo", httpConfig(webServer)));
+        manager.startAll();
+        assertEquals(McpServerStatus.READY, manager.server("demo").status());
+
+        // 工具调用返回 500（网络错误模拟）→ 恢复管理器调度自动重启
+        webServer.enqueue(new MockResponse().setResponseCode(500));
+        registry.executeToolOutput("mcp__demo__echo", "{}");
+
+        assertTrue(recoveryScheduled("demo"), "工具调用失败后应调度自动重启");
+    }
+
+    private boolean recoveryScheduled(String name) throws Exception {
+        java.lang.reflect.Field f = McpServerManager.class.getDeclaredField("recoveryManager");
+        f.setAccessible(true);
+        com.chisel.mcp.recovery.ServerRecoveryManager recovery =
+                (com.chisel.mcp.recovery.ServerRecoveryManager) f.get(manager);
+        return recovery.info(name).isActive();
+    }
+
     // ---- helpers ----
 
     private void enqueueInitialize() {

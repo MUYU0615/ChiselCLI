@@ -233,7 +233,8 @@ public class Main {
             BrowserSession browserSession = new BrowserSession();
             BrowserConnectivityCheck browserConnectivityCheck = new BrowserConnectivityCheck();
             hitlToolRegistry.setBrowserGuard(new BrowserGuard(browserSession, new SensitivePagePolicy()));
-            McpServerManager mcpServerManager = new McpServerManager(hitlToolRegistry, Path.of("."));
+            McpServerManager mcpServerManager = new McpServerManager(hitlToolRegistry, Path.of("."),
+                    new com.chisel.mcp.config.McpConfigLoader(Path.of(".")), llmClientRef::get);
             AtomicReference<SkillRegistry> skillRegistryRef = new AtomicReference<>();
             hitlToolRegistry.setBrowserConnector(new com.chisel.browser.BrowserConnector() {
                 @Override
@@ -2830,12 +2831,16 @@ public class Main {
         String ready = "Model " + model + " (" + provider + ")";
         String capabilities = "ReAct · Plan · MCP · Browser · Image · Tools · Memory · RAG";
         String state = mcp + " · " + skills + " · ReAct";
+        // Chisel 凿子 logo：握柄 + 楔形刃口
         List<String> lines = new ArrayList<>(List.of(
-                "   " + AnsiStyle.section("██████████") + "    " + AnsiStyle.emphasis("ChiselCLI") + " " + AnsiStyle.section("⚒") + "  " + AnsiStyle.subtle("v" + VERSION),
-                "   " + AnsiStyle.section("  ██  ██") + "    " + AnsiStyle.subtle(ready),
-                "   " + AnsiStyle.section("  ██  ██") + "    " + AnsiStyle.subtle(state),
-                "   " + AnsiStyle.section("  ██  ██") + "    " + AnsiStyle.subtle(capabilities),
-                "   " + AnsiStyle.section("  ██  ██"),
+                "   " + AnsiStyle.section("   ██") + "        " + AnsiStyle.emphasis("ChiselCLI") + " " + AnsiStyle.section("⚒") + "  " + AnsiStyle.subtle("v" + VERSION),
+                "   " + AnsiStyle.section("   ██") + "        " + AnsiStyle.subtle(ready),
+                "   " + AnsiStyle.section("   ██") + "        " + AnsiStyle.subtle(state),
+                "   " + AnsiStyle.section("  ████") + "        " + AnsiStyle.subtle(capabilities),
+                "   " + AnsiStyle.section(" ██  ██") + "        " + AnsiStyle.subtle("forge · carve · ship"),
+                "   " + AnsiStyle.section("██    ██"),
+                "   " + AnsiStyle.section(" ██  ██"),
+                "   " + AnsiStyle.section("  ████"),
                 "",
                 "Tips for getting started:",
                 "1. Type " + AnsiStyle.emphasis("/") + " for commands and Tab completion",

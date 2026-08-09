@@ -192,6 +192,14 @@ public class McpClient implements AutoCloseable {
         rpc.onNotification(listener);
     }
 
+    /**
+     * 注册 server → client JSON-RPC 请求处理器（如 sampling/createMessage）。
+     * 透传到底层 {@link JsonRpcClient}。
+     */
+    public void onServerRequest(com.chisel.mcp.jsonrpc.JsonRpcClient.RequestHandler handler) {
+        rpc.onServerRequest(handler);
+    }
+
     public static String formatResources(List<McpResourceDescriptor> resources) {
         if (resources == null || resources.isEmpty()) {
             return "📭 该 MCP server 暂无 resources";

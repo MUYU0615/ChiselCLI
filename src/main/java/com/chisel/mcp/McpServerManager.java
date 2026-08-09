@@ -1,13 +1,19 @@
 package com.chisel.mcp;
 
+import com.chisel.llm.LlmClient;
 import com.chisel.mcp.config.McpConfigLoader;
 import com.chisel.mcp.config.McpServerConfig;
 import com.chisel.mcp.notifications.NotificationRouter;
+import com.chisel.mcp.oauth.McpOAuthClient;
+import com.chisel.mcp.oauth.OAuthRequiredException;
+import com.chisel.mcp.oauth.OAuthTokenStore;
 import com.chisel.mcp.protocol.McpToolDescriptor;
+import com.chisel.mcp.recovery.ServerRecoveryManager;
 import com.chisel.mcp.resources.McpResourceCache;
 import com.chisel.mcp.resources.McpResourceContent;
 import com.chisel.mcp.resources.McpResourceDescriptor;
 import com.chisel.mcp.resources.McpResourceTool;
+import com.chisel.mcp.sampling.SamplingHandler;
 import com.chisel.policy.AuditLog;
 import com.chisel.mcp.transport.McpTransport;
 import com.chisel.mcp.transport.StdioTransport;
@@ -33,6 +39,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Supplier;
 
 public class McpServerManager implements AutoCloseable {
     private static final Duration STARTUP_PROGRESS_INTERVAL = Duration.ofSeconds(5);
@@ -42,15 +49,31 @@ public class McpServerManager implements AutoCloseable {
     private final McpConfigLoader configLoader;
     private final Map<String, McpServer> servers = new ConcurrentHashMap<>();
     private final McpResourceCache resourceCache = new McpResourceCache();
+    private final ServerRecoveryManager recoveryManager;
+    private final SamplingHandler samplingHandler;
+    private volatile OAuthTokenStore oauthTokenStore;
 
     public McpServerManager(ToolRegistry toolRegistry, Path projectDir) {
-        this(toolRegistry, projectDir, new McpConfigLoader(projectDir));
+        this(toolRegistry, projectDir, new McpConfigLoader(projectDir), () -> null);
     }
 
     public McpServerManager(ToolRegistry toolRegistry, Path projectDir, McpConfigLoader configLoader) {
+        this(toolRegistry, projectDir, configLoader, () -> null);
+    }
+
+    /**
+     * @param llmSupplier 供 sampling 使用的 LLM client（运行时切换跟随当前模型）；
+     *                    为 null 时 sampling 不可用，server 请求会被拒绝
+     */
+    public McpServerManager(ToolRegistry toolRegistry, Path projectDir, McpConfigLoader configLoader,
+                            Supplier<LlmClient> llmSupplier) {
         this.toolRegistry = toolRegistry;
         this.projectDir = projectDir.toAbsolutePath().normalize();
         this.configLoader = configLoader;
+        this.recoveryManager = new ServerRecoveryManager(this, toolRegistry.getAuditLog());
+        this.samplingHandler = new SamplingHandler(
+                llmSupplier == null ? () -> null : llmSupplier,
+                toolRegistry.getAuditLog());
     }
 
     public void loadConfiguredServers() throws IOException {
@@ -258,6 +281,10 @@ public class McpServerManager implements AutoCloseable {
                 case DISABLED -> "○ disabled";
                 case ERROR -> "✗ error";
             };
+            var recovery = recoveryManager.info(server.name());
+            if (recovery.isActive()) {
+                status = "↻ restarting (attempt " + recovery.attempt() + "/" + recoveryManager.maxAttempts() + ")";
+            }
             String tools = server.status() == McpServerStatus.READY
                     ? server.tools().size() + (server.tools().size() == 1 ? " tool" : " tools")
                     : "—";
@@ -411,21 +438,84 @@ public class McpServerManager implements AutoCloseable {
             // 在单 server 启动路径里展开 ${VAR} 与校验 transport，
             // 单个失败仅标 ERROR，不会阻塞其他 server。
             configLoader.prepare(server.config());
-            McpTransport transport = createTransport(server.config());
-            McpClient client = new McpClient(server.name(), transport);
-            client.initialize();
+            McpClient client = createAndInitializeClient(server);
             registerNotificationHandlers(server, client);
+            registerSamplingHandler(client);
             List<McpToolDescriptor> tools = buildToolList(server, client);
             replaceTools(server, client, tools);
             server.client(client);
             server.tools(tools);
             server.markStarted();
             server.status(McpServerStatus.READY);
+            recoveryManager.reset(server.name());
         } catch (Exception e) {
             server.close();
             server.errorMessage(e.getMessage());
             server.status(McpServerStatus.ERROR);
         }
+    }
+
+    /**
+     * 创建 transport + client 并完成 initialize。HTTP server 返回 401 + OAuth 挑战时
+     * 自动走授权码 + PKCE 流程（首次）或 refresh token 刷新（已授权），然后重建
+     * transport（携带新 token）重试 initialize。
+     */
+    private McpClient createAndInitializeClient(McpServer server) throws IOException {
+        McpClient client = new McpClient(server.name(), createTransport(server));
+        try {
+            client.initialize();
+            return client;
+        } catch (OAuthRequiredException e) {
+            // 完整 OAuth 授权流程（打开浏览器），成功后保存 token 并重建 client
+            if (!server.config().isHttp()) {
+                throw e;
+            }
+            OAuthTokenStore store = oauthTokenStore();
+            if (store.has(server.name())) {
+                // 已有 token 但 refresh 失败（被吊销 / 过期），清掉重新授权
+                store.remove(server.name());
+            }
+            McpOAuthClient oauth = new McpOAuthClient(null, System.out);
+            var metadata = oauth.discover(server.config().getUrl(), e.challenge());
+            var result = oauth.authorize(metadata);
+            store.save(server.name(), result.accessToken(), result.refreshToken(),
+                    result.expiresInSeconds(), result.scope());
+            toolRegistry.getAuditLog().record(AuditLog.AuditEntry.allow(
+                    "mcp_oauth_authorize", server.name(), 0));
+            client.close();
+            client = new McpClient(server.name(), createTransport(server));
+            client.initialize();
+            return client;
+        }
+    }
+
+    private void registerSamplingHandler(McpClient client) {
+        client.onServerRequest((method, params) -> {
+            if (!"sampling/createMessage".equals(method)) {
+                return null;
+            }
+            try {
+                return com.chisel.mcp.jsonrpc.JsonRpcClient.RequestResult.of(
+                        samplingHandler.handle(params));
+            } catch (Exception e) {
+                return com.chisel.mcp.jsonrpc.JsonRpcClient.RequestResult.error(
+                        e.getMessage() == null ? "sampling failed" : e.getMessage());
+            }
+        });
+    }
+
+    private OAuthTokenStore oauthTokenStore() {
+        OAuthTokenStore store = oauthTokenStore;
+        if (store == null) {
+            synchronized (this) {
+                store = oauthTokenStore;
+                if (store == null) {
+                    store = new OAuthTokenStore(OAuthTokenStore.defaultFile());
+                    oauthTokenStore = store;
+                }
+            }
+        }
+        return store;
     }
 
     private List<McpToolDescriptor> buildToolList(McpServer server, McpClient client) throws IOException {
@@ -484,19 +574,26 @@ public class McpServerManager implements AutoCloseable {
     /**
      * MCP 工具执行入口：把 LLM 给的 JSON 参数透传给 server 的 tools/call，并把异常转成 LLM 可读字符串。
      * 提取成独立方法是为了让 server 维度的错误信息（serverName/toolName）在堆栈和日志里清晰可见。
+     * 网络类失败（IOException）同时通知恢复管理器自动重启。
      */
-    private static ToolOutput invokeMcpToolOutput(McpClient client, McpToolDescriptor descriptor, String argumentsJson) {
+    private ToolOutput invokeMcpToolOutput(McpClient client, McpToolDescriptor descriptor, String argumentsJson) {
         try {
             return client.callToolOutput(descriptor.name(), argumentsJson);
+        } catch (IOException e) {
+            recoveryManager.onToolFailure(descriptor.serverName(), e);
+            return ToolOutput.text("MCP 工具调用失败 (" + descriptor.serverName() + "/" + descriptor.name() + "): "
+                    + e.getMessage());
         } catch (Exception e) {
             return ToolOutput.text("MCP 工具调用失败 (" + descriptor.serverName() + "/" + descriptor.name() + "): "
                     + e.getMessage());
         }
     }
 
-    private McpTransport createTransport(McpServerConfig config) throws IOException {
+    private McpTransport createTransport(McpServer server) throws IOException {
+        McpServerConfig config = server.config();
         if (config.isHttp()) {
-            return new StreamableHttpTransport(config.getUrl(), config.getHeaders());
+            return new StreamableHttpTransport(config.getUrl(), config.getHeaders(),
+                    oauthTokenStore(), server.name());
         }
         return new StdioTransport(config.getCommand(), config.getArgs(), config.getEnv(), projectDir);
     }
@@ -564,5 +661,6 @@ public class McpServerManager implements AutoCloseable {
             unregisterTools(server);
             server.close();
         }
+        recoveryManager.close();
     }
 }

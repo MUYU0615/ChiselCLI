@@ -2,7 +2,7 @@
 
 一个面向商业场景的 Java Agent CLI 产品，对标 Claude Code。
 
-核心能力：ReAct / Plan-and-Execute / Multi-Agent 三种执行模式、统一工具调用与并行调度、手写 MCP 客户端（resources / mentions / 动态工具）、记忆与上下文工程（长短记忆 / 自动压缩 / 项目记忆）、RAG 代码语义检索（分词 + Embedding + SQLite 向量存储 + AST 分块）、HITL 审批流、安全策略与审计日志、JLine 交互 TUI、CDP 浏览器会话复用、LSP 诊断注入、Side-Git 快照回滚、异步后台任务 + Runtime API、图片输入、微信 iLink 通道。
+核心能力：ReAct / Plan-and-Execute / Multi-Agent 三种执行模式、统一工具调用与并行调度、手写 MCP 客户端（resources / mentions / 动态工具 / OAuth / sampling / 自动重启）、记忆与上下文工程（长短记忆 / 自动压缩 / 项目记忆）、RAG 代码语义检索（分词 + Embedding + SQLite 向量存储 + AST 分块）、HITL 审批流、安全策略与审计日志、JLine 交互 TUI、CDP 浏览器会话复用、LSP 诊断注入、Side-Git 快照回滚、异步后台任务 + Runtime API、图片输入、微信 iLink 通道。
 
 当前进度：已完成 inline 流式 TUI、LSP 诊断注入、Git Side-History 快照与回滚、Prompt 分层架构、异步后台任务 + Runtime API、图片复制粘贴输入、微信 iLink 通道文本 MVP。
 
@@ -164,7 +164,7 @@ v16.1 抽出 `Renderer` 接口 + 三个实现：
 
 | 形态 | 启用方式 | 视觉风格 |
 |---|---|---|
-| **inline 流式 TUI**（默认） | 直接运行 / `CHISEL_RENDERER=inline` | Claude Code / Qoder 风格：π 主题彩色开屏、主屏直出、transcript 当前位置的 `* ` 输入提示、JLine `Status` 托管的底部 dock（YOLO/HITL、MCP、Skill、model、ctx、token、cwd 等关键字段带克制彩色高亮；ctx 是当前上下文估算，in/out/cache 是调用统计）、右侧输入提示、行内可折叠工具块（`Read 3 files (ctrl+o to expand)`）、行内 git diff、HITL 单字符 `[y/n/a/s/m]` 提示 |
+| **inline 流式 TUI**（默认） | 直接运行 / `CHISEL_RENDERER=inline` | Claude Code / Qoder 风格：凿子（Chisel）主题彩色开屏、主屏直出、transcript 当前位置的 `* ` 输入提示、JLine `Status` 托管的底部 dock（YOLO/HITL、MCP、Skill、model、ctx、token、cwd 等关键字段带克制彩色高亮；ctx 是当前上下文估算，in/out/cache 是调用统计）、右侧输入提示、行内可折叠工具块（`Read 3 files (ctrl+o to expand)`）、行内 git diff、HITL 单字符 `[y/n/a/s/m]` 提示 |
 | **lanterna 全屏 TUI** | `CHISEL_RENDERER=lanterna`（或兼容旧 `CHISEL_TUI=true`） | v16 三栏全屏：文件树 + 对话流 + 状态栏 + 底部输入栏，HITL 模态弹窗 |
 | **plain 兜底** | `CHISEL_RENDERER=plain` | 纯 println，无折叠 / 状态栏，等价 v15 行为 |
 
@@ -239,6 +239,13 @@ v16.1 抽出 `Renderer` 接口 + 三个实现：
 - 微信侧用户消息会回显到 ChiselCLI 终端 transcript；ChiselCLI 终端继续显示 thinking / 工具调用过程，微信侧只接收 assistant 正文。iLink 协议层仍是 `text_item.text` 文本消息，没有显式 Markdown parse mode；ChiselCLI 会保留 ClawBot 稳定支持的 Markdown 子集（列表、引用、粗体、行内代码、真实代码块），把标题转成粗体标题、把表格转成移动端更稳的键值/列表，并过滤图片 Markdown / H5-H6 / 中文斜体等兼容性差的标记；非代码类 fenced block（流程说明、长中文箭头链）会解包并换行，避免微信侧出现横向滚动代码块。iLink 不提供真正 SSE 或改单条消息能力。
 - 微信通道使用非交互式默认拒绝策略：只读工具默认允许，`write_file` / `create_project` 继续受 workspace PathGuard 限制，`execute_command` 必须精确命中命令白名单，`mcp__*` 必须命中 MCP 白名单，`revert_turn` 和浏览器会话切换默认拒绝
 - 当前文本 MVP 会保留图片 / 文件消息的媒体元数据提示，但 CDN 下载解密、图片块输入和 `/send` 文件推送仍待后续媒体链路补齐
+
+### 第二十四期：MCP OAuth + sampling + server 自动重启
+
+- **OAuth 2.0 Authorization Code + PKCE**：Streamable HTTP server 返回 `401 + WWW-Authenticate` 挑战（`MCP-OAuth` 或 `Bearer resource_metadata=`）时自动走授权码 + PKCE 换取 token，持久化到 `~/.chisel/mcp/oauth-tokens.json`（权限 600），运行中 token 过期自动用 refresh_token 秒级刷新后重试；无浏览器环境会打印授权 URL 并继续等本地回调
+- **`sampling/createMessage` 反向 LLM 调用**：server 可请求 ChiselCLI 用当前配置的 LLM 生成回复（复用 `LlmClientFactory`）；终端默认允许但写审计，server 请求带 `toolCall` 字段时直接拒绝（不执行工具）；`/model` 运行时切换会跟随当前模型
+- **MCP server 自动重启**：工具调用因网络/进程失败时自动恢复，指数退避（1s→30s 封顶）默认最多 3 次；重启成功后重新走 initialize → tools/list → 工具注册；连续失败标 ERROR 等手动 `/mcp restart`；`/mcp` 状态行展示 `restarting (attempt n/3)`
+- 详细设计见 `docs/phase-24-mcp-oauth-sampling-recovery.md`
 
 ### 第六期 HITL 增强（路径围栏 / 命令快速拒绝 / 操作审计）
 
@@ -524,7 +531,7 @@ google-chrome --remote-debugging-port=9222 --user-data-dir=/tmp/chisel-chrome-pr
 帮我看下 @filesystem:file://README.md 这份文档
 ```
 
-OAuth 和 `sampling/createMessage` 当前未实现；远程 server 需要鉴权时仍使用 `headers` + 环境变量注入 Bearer token。
+OAuth 2.0 Authorization Code + PKCE、`sampling/createMessage` 反向 LLM 调用与 MCP server 自动重启已在第二十四期交付；远程 server 需要鉴权时既可预置 `headers` + 环境变量注入 Bearer token，也可在遇到 `401 + WWW-Authenticate` 挑战时自动走浏览器授权。
 
 ### 3. 编译运行
 

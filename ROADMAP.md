@@ -239,6 +239,8 @@
 
 ## MCP 高级能力（resources 双轨 + prompts 查看 + 被动通知） ✅
 
+**后续增强已交付（第 24 期，见 `docs/phase-24-mcp-oauth-sampling-recovery.md`）**：OAuth 2.0 Authorization Code + PKCE（401 挑战自动授权 + token 持久化 + refresh 刷新）、`sampling/createMessage` 反向 LLM 调用（复用当前模型，受审计管理，toolCall 请求拒绝）、MCP server 自动重启（指数退避 + 工具重注册）。
+
 **前置依赖**： MCP 协议核心
 
 **目标**：优先补齐 MCP resources 体验，对齐 Claude Code 的资源引用方式，并提供 prompts 查看、被动通知处理与运行中取消。OAuth 与 sampling 已确认延后，不计入本期交付。
@@ -602,6 +604,7 @@
 **估算**：5–6 天
 
 ---
+
 ## 技术栈演进图
 
 ```
@@ -611,6 +614,10 @@
 
 Git快照回滚 ──► Prompt分层 ──► 异步后台 ──► 图片输入
 ```
+
+## MCP 增强（第 24 期） ✅
+
+OAuth Authorization Code + PKCE / sampling 反向 LLM 调用 / server 自动重启
 
 ## 学习路径建议
 
@@ -624,7 +631,6 @@ Git快照回滚 ──► Prompt分层 ──► 异步后台 ──► 图片�
 
 - **Claude Code**：人机协同、TUI界面
 - **OpenClaw**：多Agent、MCP集成
-- **PaiAgent**：工作流编排、可视化
 - **LangGraph**：状态管理、循环控制
 - **Spring AI**：多模型适配、工具回调
 
@@ -645,4 +651,4 @@ Git快照回滚 ──► Prompt分层 ──► 异步后台 ──► 图片�
 
 ---
 
-*已完成 TUI 产品化（含 16.1 形态修正：默认切换为 inline 流式 TUI，Lanterna 全屏 TUI 通过 `CHISEL_RENDERER=lanterna` 保留）、 LSP 诊断注入 MVP、 Git Side-History 快照与回滚 MVP、 Prompt 分层架构 MVP、后台任务 + Runtime API MVP、图片复制粘贴输入 MVP。*
+*已完成 TUI 产品化（含 16.1 形态修正：默认切换为 inline 流式 TUI，Lanterna 全屏 TUI 通过 `CHISEL_RENDERER=lanterna` 保留）、 LSP 诊断注入 MVP、 Git Side-History 快照与回滚 MVP、 Prompt 分层架构 MVP、后台任务 + Runtime API MVP、图片复制粘贴输入 MVP、微信 iLink 通道文本 MVP、MCP OAuth + sampling + server 自动重启（第 24 期）。*
