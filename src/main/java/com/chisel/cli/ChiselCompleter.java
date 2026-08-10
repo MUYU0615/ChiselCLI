@@ -15,15 +15,23 @@ import java.util.function.Supplier;
 final class ChiselCompleter implements Completer {
     private final Supplier<List<McpResourceDescriptor>> resourceSupplier;
     private final Supplier<List<Skill>> skillSupplier;
+    private final Supplier<List<String>> nextStepSupplier;
 
     ChiselCompleter(Supplier<List<McpResourceDescriptor>> resourceSupplier) {
-        this(resourceSupplier, List::of);
+        this(resourceSupplier, List::of, List::of);
     }
 
     ChiselCompleter(Supplier<List<McpResourceDescriptor>> resourceSupplier,
                     Supplier<List<Skill>> skillSupplier) {
+        this(resourceSupplier, skillSupplier, List::of);
+    }
+
+    ChiselCompleter(Supplier<List<McpResourceDescriptor>> resourceSupplier,
+                    Supplier<List<Skill>> skillSupplier,
+                    Supplier<List<String>> nextStepSupplier) {
         this.resourceSupplier = resourceSupplier;
         this.skillSupplier = skillSupplier == null ? List::of : skillSupplier;
+        this.nextStepSupplier = nextStepSupplier == null ? List::of : nextStepSupplier;
     }
 
     @Override
@@ -33,6 +41,15 @@ final class ChiselCompleter implements Completer {
         }
         String input = line.line() == null ? "" : line.line();
         String word = line.word() == null ? "" : line.word();
+        // 空输入 + 有下一步建议：把建议作为 Tab 候选（Claude Code 式）
+        if (input.isBlank() && nextStepSupplier != null) {
+            for (String suggestion : nextStepSupplier.get()) {
+                if (suggestion != null && !suggestion.isBlank()) {
+                    candidates.add(new Candidate(
+                            suggestion, suggestion, "下一步建议", "Tab 补全下一步指令", null, null, true));
+                }
+            }
+        }
         if (word.startsWith("@image:")) {
             completeImagePath(line, candidates);
             return;

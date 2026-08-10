@@ -2,9 +2,9 @@
 
 一个面向商业场景的 Java Agent CLI 产品，对标 Claude Code。
 
-**核心能力**：ReAct / Plan-and-Execute / Multi-Agent 三种执行模式、统一工具调用与并行调度、手写 MCP 客户端（resources / mentions / 动态工具 / OAuth / sampling / 自动重启）、记忆与上下文工程（长短记忆 / 自动压缩 / 项目记忆）、RAG 代码语义检索（分词 + Embedding + SQLite 向量存储 + AST 分块）、HITL 审批流、安全策略与审计日志、JLine 交互 TUI、CDP 浏览器会话复用、LSP 诊断注入、Side-Git 快照回滚、异步后台任务 + Runtime API、图片输入、微信 iLink 通道。
+**核心能力**：ReAct / Plan-and-Execute / Multi-Agent 三种执行模式、统一工具调用与并行调度、手写 MCP 客户端（resources / mentions / 动态工具 / OAuth / sampling / 自动重启）、记忆与上下文工程（长短记忆 / 自动压缩 / 项目记忆）、RAG 代码语义检索（分词 + Embedding + SQLite 向量存储 + AST 分块）、HITL 审批流、安全策略与审计日志、JLine 交互 TUI、CDP 浏览器会话复用、LSP 诊断注入、Side-Git 快照回滚、异步后台任务 + Runtime API、图片输入、微信 iLink 通道、下一步建议（Claude Code 式 Tab 补全）。
 
-**已交付**：inline 流式 TUI、LSP 诊断注入、Git Side-History 快照与回滚、Prompt 分层架构、异步后台任务 + Runtime API、图片复制粘贴输入、微信 iLink 通道文本 MVP、MCP OAuth / sampling / server 自动重启。
+**已交付**：inline 流式 TUI、LSP 诊断注入、Git Side-History 快照与回滚、Prompt 分层架构、异步后台任务 + Runtime API、图片复制粘贴输入、微信 iLink 通道文本 MVP、MCP OAuth / sampling / server 自动重启、下一步建议（任务完成后异步生成候选指令，空输入按 Tab 一键补全）。
 
 ## 快速开始
 

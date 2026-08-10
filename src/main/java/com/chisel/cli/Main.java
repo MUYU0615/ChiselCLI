@@ -236,6 +236,8 @@ public class Main {
             McpServerManager mcpServerManager = new McpServerManager(hitlToolRegistry, Path.of("."),
                     new com.chisel.mcp.config.McpConfigLoader(Path.of(".")), llmClientRef::get);
             AtomicReference<SkillRegistry> skillRegistryRef = new AtomicReference<>();
+            NextStepSuggestions nextStepSuggestions = new NextStepSuggestions();
+            NextStepGenerator nextStepGenerator = new NextStepGenerator(nextStepSuggestions);
             hitlToolRegistry.setBrowserConnector(new com.chisel.browser.BrowserConnector() {
                 @Override
                 public String status() {
@@ -260,7 +262,8 @@ public class Main {
                     .terminal(terminal)
                     .history(new ChiselHistory())
                     .completer(new ChiselCompleter(mcpServerManager::resourceCandidates,
-                            () -> skillRegistryRef.get() == null ? List.of() : skillRegistryRef.get().allSkills()))
+                            () -> skillRegistryRef.get() == null ? List.of() : skillRegistryRef.get().allSkills(),
+                            nextStepSuggestions::tabCandidates))
                     .highlighter(new ChiselHighlighter())
                     .build();
             lineReader.option(LineReader.Option.BRACKETED_PASTE, true);
@@ -273,6 +276,13 @@ public class Main {
             // JLine-first：启动输出、命令输出、Agent 流式内容都走同一条 Renderer.stream() 通道。
             // inline 首屏要挂到 LineReader 首次初始化回调里，避免在 readLine 接管屏幕前用裸输出抢光标。
             Renderer renderer = RendererFactory.create(RendererFactory.resolveMode(), terminal);
+            // 下一步建议变更 → 经 renderer 显示提示（不直接抢 stdout）
+            nextStepSuggestions.setListener(suggestions -> {
+                String hint = NextStepSuggestions.formatHint(suggestions);
+                if (!hint.isEmpty()) {
+                    renderer.stream().println(com.chisel.util.AnsiStyle.subtle(hint));
+                }
+            });
             RendererHitlHandler rendererHitl = new RendererHitlHandler(renderer, hitlHandler.isEnabled());
             hitlHandler.setDelegate(rendererHitl);
             if (renderer instanceof InlineRenderer inline) {
@@ -422,6 +432,7 @@ public class Main {
                     case CLEAR -> {
                         reactAgent.clearHistory();
                         hitlHandler.clearApprovedAll();
+                        nextStepSuggestions.clear();
                         renderer.updateStatus(statusInfo(reactAgent, mcpServerManager, skillRegistry, "idle"));
                         ui.println("🗑️ 当前对话历史已清空，长期记忆保持不变\n");
                         continue;
@@ -840,13 +851,26 @@ public class Main {
                 }
                 nextTaskUsePlanMode = false;
                 nextTaskUseTeamMode = false;
+                // Claude Code 式：异步生成下一步建议，完成后经 listener 显示提示。
+                // 注意：inline 模式下 Agent 可能返回空串（内容已流式显示），
+                // 所以建议生成不依赖 response 是否为空——只要跑了任务就生成。
+                // 只喂最近几轮对话（含工具结果），避免完整历史让建议生成变慢。
                 if (response != null && !response.isBlank()) {
                     ui.println(response);
                     ui.println();
                 }
+                if (taskInput != null && !taskInput.isBlank()) {
+                    var history = reactAgent.getConversationHistory();
+                    int start = Math.max(0, history.size() - 8);
+                    String context = history.subList(start, history.size()).stream()
+                            .map(m -> (m.role() == null ? "?" : m.role()) + ": " + (m.content() == null ? "" : m.content()))
+                            .reduce("", (a, b) -> a + "\n" + b);
+                    nextStepGenerator.generateAsync(llmClientRef.get(), context);
+                }
             }
             ui.println("\n👋 再见!");
             wechatRuntime.stop();
+            nextStepGenerator.close();
             renderer.close();
 
         } catch (IOException e) {

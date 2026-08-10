@@ -51,6 +51,41 @@ class ChiselCompleterTest {
     }
 
     @Test
+    void emptyInputSuggestsNextStepsForTabCompletion() {
+        List<String> suggestions = List.of("/index 更新索引", "/plan 重构");
+        ChiselCompleter completer = new ChiselCompleter(List::of, List::of, () -> suggestions);
+        List<Candidate> candidates = new ArrayList<>();
+
+        completer.complete(null, parsed("", ""), candidates);
+
+        assertTrue(candidates.stream().anyMatch(c -> c.displ().equals("/index 更新索引")));
+        assertTrue(candidates.stream().anyMatch(c -> c.displ().equals("/plan 重构")));
+        assertTrue(candidates.stream().anyMatch(c -> c.group().contains("下一步")));
+    }
+
+    @Test
+    void nextStepsNotSuggestedWhenInputNonEmpty() {
+        List<String> suggestions = List.of("/index 更新索引");
+        ChiselCompleter completer = new ChiselCompleter(List::of, List::of, () -> suggestions);
+        List<Candidate> candidates = new ArrayList<>();
+
+        completer.complete(null, parsed("hello", "hello"), candidates);
+
+        assertTrue(candidates.stream().noneMatch(c -> c.displ().equals("/index 更新索引")),
+                "非空输入时不应注入下一步建议");
+    }
+
+    @Test
+    void noNextStepsWhenSupplierEmpty() {
+        ChiselCompleter completer = new ChiselCompleter(List::of, List::of, List::of);
+        List<Candidate> candidates = new ArrayList<>();
+
+        completer.complete(null, parsed("", ""), candidates);
+
+        assertTrue(candidates.stream().noneMatch(c -> "下一步建议".equals(c.group())));
+    }
+
+    @Test
     void completesModelProviderNames() {
         ChiselCompleter completer = new ChiselCompleter(List::of);
         List<Candidate> candidates = new ArrayList<>();
