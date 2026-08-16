@@ -24,10 +24,28 @@ public class DeepSeekClient extends AbstractOpenAiCompatibleClient {
         this(apiKey, model, API_URL);
     }
 
-    DeepSeekClient(String apiKey, String model, String apiUrl) {
+    DeepSeekClient(String apiKey, String model, String baseUrl) {
         this.apiKey = apiKey;
         this.model = model != null && !model.isBlank() ? model : DEFAULT_MODEL;
-        this.apiUrl = apiUrl != null && !apiUrl.isBlank() ? apiUrl : API_URL;
+        this.apiUrl = toChatCompletionsUrl(baseUrl);
+    }
+
+    /**
+     * 兼容两种 baseUrl 形态：
+     * - 官方：https://api.deepseek.com（拼 /chat/completions）
+     * - OpenAI 兼容网关：https://opencode.ai/zen/go/v1（同样拼 /chat/completions）
+     * - 已带 /chat/completions 的完整 URL：原样使用
+     */
+    static String toChatCompletionsUrl(String baseUrl) {
+        if (baseUrl == null || baseUrl.isBlank()) {
+            return API_URL;
+        }
+        String trimmed = baseUrl.trim();
+        if (trimmed.endsWith("/chat/completions")) {
+            return trimmed;
+        }
+        String withoutSlash = trimmed.endsWith("/") ? trimmed.substring(0, trimmed.length() - 1) : trimmed;
+        return withoutSlash + "/chat/completions";
     }
 
     @Override

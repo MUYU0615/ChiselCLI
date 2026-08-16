@@ -28,7 +28,7 @@ public class LlmClientFactory {
 
         return switch (normalized) {
             case "glm" -> new GLMClient(apiKey, model);
-            case "deepseek" -> new DeepSeekClient(apiKey, model);
+            case "deepseek" -> new DeepSeekClient(apiKey, model, baseUrl);
             case "step" -> new StepClient(apiKey, model, baseUrl);
             case "kimi" -> new KimiClient(apiKey, model, baseUrl);
             case "freellmapi" -> new FreeLlmApiClient(apiKey, model, baseUrl);

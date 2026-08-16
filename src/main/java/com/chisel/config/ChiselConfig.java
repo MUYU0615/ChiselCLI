@@ -283,11 +283,23 @@ public class ChiselConfig {
                     line = line.trim();
                     if (line.isEmpty() || line.startsWith("#")) continue;
                     if (line.startsWith(key + "=")) {
-                        return line.substring((key + "=").length()).trim();
+                        return stripOptionalQuotes(line.substring((key + "=").length()).trim());
                     }
                 }
             } catch (IOException ignored) {}
         }
         return null;
+    }
+
+    private static String stripOptionalQuotes(String value) {
+        if (value == null || value.length() < 2) {
+            return value;
+        }
+        char first = value.charAt(0);
+        char last = value.charAt(value.length() - 1);
+        if ((first == '"' && last == '"') || (first == '\'' && last == '\'')) {
+            return value.substring(1, value.length() - 1);
+        }
+        return value;
     }
 }
