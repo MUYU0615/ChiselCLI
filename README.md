@@ -311,6 +311,7 @@ MCP 子系统默认开启。`~/.chisel/mcp.json` 不存在时，ChiselCLI 会自
 - `save_memory` - Agent 内置工具，仅在用户明确要求保存长期偏好或稳定事实时调用；默认 `scope=project`
 - `/init` - 生成精简项目级记忆 `PAI.md`；已存在时不覆盖，`/init --force` 可重写
 - `/export` - 导出当前 ReAct 会话对话记录为 Markdown（包含完整 system prompt），写入 `~/.chisel/exports/session-*.md`
+- `/resume` - 列出历史会话；`/resume <序号>` 恢复指定会话继续对话（会话持久化在 `~/.chisel/history/`）
 - `/index [路径]` - 索引代码库（默认当前目录）
 - `/search <查询>` - 语义检索代码（RAG 辅助路径）
 - `/graph <类名>` - 查看代码关系图谱

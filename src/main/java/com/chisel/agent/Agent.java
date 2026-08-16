@@ -274,6 +274,49 @@ public class Agent {
     }
 
     /**
+     * 恢复历史会话消息（/resume 用）。
+     *
+     * 保留当前 system prompt（第 0 条），把持久化的消息追加其后。
+     * 只接受 user / assistant / tool 三类角色，忽略 system（避免多 system 冲突）。
+     * 短期记忆同步重建，让记忆检索能感知恢复的上下文。
+     */
+    public void restoreHistory(List<LlmClient.Message> messages) {
+        if (messages == null || messages.isEmpty()) {
+            return;
+        }
+        // 保留 system prompt（第 0 条），其余清掉再追加恢复的消息
+        List<LlmClient.Message> keep = new ArrayList<>();
+        if (!conversationHistory.isEmpty()
+                && "system".equals(conversationHistory.get(0).role())) {
+            keep.add(conversationHistory.get(0));
+        } else {
+            keep.add(LlmClient.Message.system(buildSystemPrompt("")));
+        }
+        for (LlmClient.Message message : messages) {
+            String role = message.role();
+            if (role == null || "system".equals(role)) {
+                continue;
+            }
+            keep.add(message);
+        }
+        conversationHistory.clear();
+        conversationHistory.addAll(keep);
+
+        // 短期记忆重建：让 /save 检索与上下文状态感知恢复内容
+        memoryManager.clearShortTerm();
+        for (LlmClient.Message message : messages) {
+            if (message.content() == null || message.content().isBlank()) {
+                continue;
+            }
+            switch (message.role()) {
+                case "user" -> memoryManager.addUserMessage(message.content());
+                case "assistant" -> memoryManager.addAssistantMessage(message.content());
+                default -> {}
+            }
+        }
+    }
+
+    /**
      * 手动压缩当前 ReAct 对话历史，不等待上下文窗口阈值触发。
      */
     public CompactionResult compactHistoryNow() {

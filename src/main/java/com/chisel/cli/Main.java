@@ -330,6 +330,8 @@ public class Main {
             reactAgent.setExternalContextSupplier(mcpServerManager::resourceIndexForPrompt);
             reactAgent.setSkillRegistry(skillRegistry);
             reactAgent.setSkillContextBuffer(skillContextBuffer);
+            // 当前会话 id：本进程内所有对话落盘到同一会话文件，支持 /resume 跨进程恢复
+            String currentSessionId = com.chisel.tui.history.ConversationSnapshot.generateSessionId();
             DurableTaskManager taskManager = openTaskManager(llmClientRef);
             taskManager.start();
             Runtime.getRuntime().addShutdownHook(new Thread(taskManager::close, "chisel-task-shutdown"));
@@ -730,6 +732,10 @@ public class Main {
                         handleExportCommand(ui, reactAgent);
                         continue;
                     }
+                    case RESUME -> {
+                        handleResumeCommand(ui, reactAgent, command.payload());
+                        continue;
+                    }
                     case INDEX_CODE -> {
                         String indexPath = command.payload() != null ? command.payload() : ".";
                         CodeIndex indexer = new CodeIndex(ui::println);
@@ -866,6 +872,8 @@ public class Main {
                             .map(m -> (m.role() == null ? "?" : m.role()) + ": " + (m.content() == null ? "" : m.content()))
                             .reduce("", (a, b) -> a + "\n" + b);
                     nextStepGenerator.generateAsync(llmClientRef.get(), context);
+                    // 会话落盘（支持 /resume 跨进程恢复）
+                    saveCurrentSession(reactAgent, currentSessionId);
                 }
             }
             ui.println("\n👋 再见!");
@@ -2038,6 +2046,107 @@ public class Main {
             out.println("   共 " + countExportedMessages(history) + " 条消息\n");
         } catch (IOException e) {
             out.println("❌ 写入导出文件失败: " + e.getMessage() + "\n");
+        }
+    }
+
+    /**
+     * /resume 命令：列出历史会话，或按序号恢复指定会话。
+     * 会话持久化在 ~/.chisel/history/（JSONL，由 saveCurrentSession 写入）。
+     */
+    static void handleResumeCommand(PrintStream out, Agent reactAgent, String payload) {
+        try {
+            java.util.List<com.chisel.tui.history.ConversationSnapshot.SessionMeta> sessions =
+                    com.chisel.tui.history.ConversationSnapshot.listSessions();
+            if (sessions.isEmpty()) {
+                out.println("📭 没有历史会话。完成几轮对话后，会话会自动保存，可用 /resume 恢复。\n");
+                return;
+            }
+
+            String selection = payload == null ? "" : payload.trim();
+            if (selection.isEmpty()) {
+                out.println("💬 历史会话（/resume <序号> 恢复）:\n");
+                for (int i = 0; i < sessions.size(); i++) {
+                    com.chisel.tui.history.ConversationSnapshot.SessionMeta s = sessions.get(i);
+                    out.printf("  %d. %s  (%d 条消息, %s)%n",
+                            i + 1,
+                            s.title(),
+                            s.messageCount(),
+                            java.time.Instant.ofEpochMilli(s.lastActiveAt())
+                                    .atZone(java.time.ZoneId.systemDefault())
+                                    .format(java.time.format.DateTimeFormatter.ofPattern("MM-dd HH:mm")));
+                }
+                out.println();
+                return;
+            }
+
+            int index;
+            try {
+                index = Integer.parseInt(selection);
+            } catch (NumberFormatException e) {
+                out.println("❌ 用法: /resume <序号>，序号来自 /resume 列出的列表\n");
+                return;
+            }
+            if (index < 1 || index > sessions.size()) {
+                out.println("❌ 序号 " + index + " 超出范围（1-" + sessions.size() + "）\n");
+                return;
+            }
+
+            String sessionId = sessions.get(index - 1).sessionId();
+            com.chisel.tui.history.ConversationSnapshot snapshot =
+                    com.chisel.tui.history.ConversationSnapshot.load(sessionId);
+            List<LlmClient.Message> restored = new java.util.ArrayList<>();
+            for (com.chisel.tui.history.ConversationSnapshot.MessageRecord record : snapshot.getMessages()) {
+                restored.add(toLlmMessage(record));
+            }
+            reactAgent.restoreHistory(restored);
+            out.println("✅ 已恢复会话: " + sessions.get(index - 1).title());
+            out.println("   共 " + restored.size() + " 条消息，继续对话吧。\n");
+        } catch (Exception e) {
+            out.println("❌ 恢复会话失败: " + e.getMessage() + "\n");
+        }
+    }
+
+    /** 把持久化的消息记录转回 LLM 消息（tool 消息需带 toolCallId）。 */
+    private static LlmClient.Message toLlmMessage(com.chisel.tui.history.ConversationSnapshot.MessageRecord record) {
+        String role = record.role();
+        String content = record.content() == null ? "" : record.content();
+        Object toolCallId = record.metadata() == null ? null : record.metadata().get("toolCallId");
+        if ("tool".equals(role) && toolCallId != null) {
+            return new LlmClient.Message("tool", content, null, null, toolCallId.toString());
+        }
+        if ("assistant".equals(role)) {
+            return new LlmClient.Message("assistant", content);
+        }
+        return new LlmClient.Message("user", content);
+    }
+
+    /** 把当前对话保存为会话文件（每轮任务结束后调用）。 */
+    static void saveCurrentSession(Agent reactAgent, String sessionId) {
+        if (reactAgent == null || sessionId == null || sessionId.isBlank()) {
+            return;
+        }
+        try {
+            List<LlmClient.Message> history = reactAgent.getConversationHistory();
+            com.chisel.tui.history.ConversationSnapshot snapshot =
+                    new com.chisel.tui.history.ConversationSnapshot(sessionId);
+            for (LlmClient.Message message : history) {
+                String role = message.role();
+                if (role == null || "system".equals(role)) {
+                    continue;
+                }
+                if ("tool".equals(role)) {
+                    snapshot.append(com.chisel.tui.history.ConversationSnapshot.MessageRecord.of(
+                            "tool", message.content(),
+                            java.util.Map.of("toolCallId",
+                                    message.toolCallId() == null ? "" : message.toolCallId())));
+                } else {
+                    snapshot.append(com.chisel.tui.history.ConversationSnapshot.MessageRecord.of(
+                            role, message.content()));
+                }
+            }
+            snapshot.save();
+        } catch (Exception e) {
+            // 会话落盘失败不阻塞主流程
         }
     }
 

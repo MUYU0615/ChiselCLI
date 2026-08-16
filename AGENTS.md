@@ -12,7 +12,7 @@
 
 - 项目名：`ChiselCLI`
 - 定位：面向商业使用的 Java Agent CLI 产品，对标 Claude Code
-- 已交付能力：ReAct / Plan+DAG / Memory / RAG / Multi-Agent / HITL / 并行工具 / 多模型 / 联网 / MCP 核心 / MCP 高级 / 长上下文 / Chrome DevTools / CDP 会话复用 / Skill / TUI / LSP 诊断 / Side-Git 快照 / Prompt 分层 / Runtime API / 图片输入 / 微信 iLink 通道文本 MVP / MCP OAuth / MCP sampling / MCP server 自动重启 / 下一步建议（Claude Code 式 Tab 补全）
+- 已交付能力：ReAct / Plan+DAG / Memory / RAG / Multi-Agent / HITL / 并行工具 / 多模型 / 联网 / MCP 核心 / MCP 高级 / 长上下文 / Chrome DevTools / CDP 会话复用 / Skill / TUI / LSP 诊断 / Side-Git 快照 / Prompt 分层 / Runtime API / 图片输入 / 微信 iLink 通道文本 MVP / MCP OAuth / MCP sampling / MCP server 自动重启 / 下一步建议（Claude Code 式 Tab 补全）/ 会话持久化与恢复（/resume）
 - `PAI.md` 是 ChiselCLI 的项目级记忆文件：启动时自动注入 system prompt，适合团队共享的长期稳定规则；个人/会变化的经验继续用 `/save` 长期记忆。
 - 下一步：MCP roots 支持 / MCP 媒体内容（image/audio 完整链路）/ 微信通道媒体链路
 - Banner 版本：`v0.1.0`，Maven 产物：`chisel-1.0-SNAPSHOT.jar`（两者不一致是正常状态）

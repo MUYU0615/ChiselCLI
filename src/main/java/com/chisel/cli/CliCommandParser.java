@@ -45,7 +45,8 @@ final class CliCommandParser {
         SKILL_OFF,
         SKILL_RELOAD,
         CONFIG,
-        EXPORT
+        EXPORT,
+        RESUME
     }
 
     record ParsedCommand(CommandType type, String payload) {
@@ -280,6 +281,14 @@ final class CliCommandParser {
 
         if (trimmed.equalsIgnoreCase("/export")) {
             return new ParsedCommand(CommandType.EXPORT, null);
+        }
+
+        // /resume 或 /resume <index>（index 为 1-based 的会话列表序号）
+        if (trimmed.equalsIgnoreCase("/resume")) {
+            return new ParsedCommand(CommandType.RESUME, "");
+        }
+        if (trimmed.regionMatches(true, 0, "/resume ", 0, 8)) {
+            return new ParsedCommand(CommandType.RESUME, trimmed.substring(8).trim());
         }
 
         if (trimmed.equalsIgnoreCase("/mcp")) {

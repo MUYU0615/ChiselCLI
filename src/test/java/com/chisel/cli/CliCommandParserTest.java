@@ -181,6 +181,22 @@ class CliCommandParserTest {
     }
 
     @Test
+    void parsesResumeSlashCommand() {
+        CliCommandParser.ParsedCommand command = CliCommandParser.parse("/resume");
+
+        assertEquals(CliCommandParser.CommandType.RESUME, command.type());
+        assertEquals("", command.payload());
+    }
+
+    @Test
+    void parsesResumeSlashCommandWithIndex() {
+        CliCommandParser.ParsedCommand command = CliCommandParser.parse("/resume 2");
+
+        assertEquals(CliCommandParser.CommandType.RESUME, command.type());
+        assertEquals("2", command.payload());
+    }
+
+    @Test
     void parsesWechatSlashCommand() {
         CliCommandParser.ParsedCommand command = CliCommandParser.parse("/wechat");
 

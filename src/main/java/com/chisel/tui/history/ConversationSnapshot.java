@@ -24,9 +24,22 @@ import java.util.stream.StreamSupport;
  */
 public class ConversationSnapshot {
 
-    private static final Path HISTORY_DIR = Path.of(System.getProperty("user.home"), ".chisel", "history");
+    /** 会话目录：默认 ~/.chisel/history，可用 -Dchisel.session.dir 或 CHISEL_SESSION_DIR 覆盖（测试隔离用）。 */
+    private static final Path HISTORY_DIR = resolveHistoryDir();
     private static final ObjectMapper MAPPER = new ObjectMapper();
     private static final AtomicLong SESSION_SEQUENCE = new AtomicLong();
+
+    private static Path resolveHistoryDir() {
+        String fromProp = System.getProperty("chisel.session.dir");
+        if (fromProp != null && !fromProp.isBlank()) {
+            return Path.of(fromProp);
+        }
+        String fromEnv = System.getenv("CHISEL_SESSION_DIR");
+        if (fromEnv != null && !fromEnv.isBlank()) {
+            return Path.of(fromEnv);
+        }
+        return Path.of(System.getProperty("user.home"), ".chisel", "history");
+    }
 
     /**
      * 消息记录。
@@ -53,7 +66,7 @@ public class ConversationSnapshot {
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record SessionMeta(
             String sessionId,
-            String title,          // 会话标题（前几条消息摘要）
+            String title,          // 会话标题（首条用户消息摘要）
             long createdAt,
             long lastActiveAt,
             int messageCount
@@ -108,14 +121,15 @@ public class ConversationSnapshot {
     }
 
     /**
-     * 保存到文件（Day 5 完整实现）。
+     * 保存到文件（追加模式写入 JSONL）。
+     * 注意：不能用 MAPPER.writeValue(writer, ...)（Jackson 会关闭 writer，
+     * 导致多条消息循环写入时报 Stream closed），改为 writeValueAsString 手动写。
      */
     public void save() throws IOException {
         Files.createDirectories(HISTORY_DIR);
-        // 追加模式写入 JSONL
         try (BufferedWriter writer = Files.newBufferedWriter(sessionFile, StandardOpenOption.CREATE, StandardOpenOption.APPEND)) {
             for (MessageRecord msg : messages) {
-                MAPPER.writeValue(writer, msg);
+                writer.write(MAPPER.writeValueAsString(msg));
                 writer.newLine();
             }
         }
@@ -144,7 +158,7 @@ public class ConversationSnapshot {
     }
 
     /**
-     * 列出所有会话。
+     * 列出所有会话（按最近活跃排序）。
      */
     public static List<SessionMeta> listSessions() throws IOException {
         if (!Files.isDirectory(HISTORY_DIR)) {
@@ -156,15 +170,31 @@ public class ConversationSnapshot {
                     .map(path -> {
                         String sessionId = path.getFileName().toString().replace(".jsonl", "");
                         try {
-                            long size = Files.size(path);
                             long lastModified = Files.getLastModifiedTime(path).toMillis();
-                            return new SessionMeta(
-                                    sessionId,
-                                    "会话 " + sessionId.substring(0, 8),
-                                    lastModified,
-                                    lastModified,
-                                    (int) (size / 200)  // 估算消息数
-                            );
+                            long createdAt = lastModified;
+                            int count = 0;
+                            String title = "";
+                            try (BufferedReader reader = Files.newBufferedReader(path)) {
+                                String line;
+                                while ((line = reader.readLine()) != null) {
+                                    if (line.trim().isEmpty()) continue;
+                                    count++;
+                                    if (title.isEmpty()) {
+                                        MessageRecord msg = MAPPER.readValue(line, MessageRecord.class);
+                                        if ("user".equals(msg.role()) && msg.content() != null && !msg.content().isBlank()) {
+                                            title = msg.content().replace("\n", " ").trim();
+                                            createdAt = msg.timestamp();
+                                            if (title.length() > 40) {
+                                                title = title.substring(0, 40) + "...";
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            if (title.isEmpty()) {
+                                title = "会话 " + sessionId.substring(0, 8);
+                            }
+                            return new SessionMeta(sessionId, title, createdAt, lastModified, count);
                         } catch (IOException e) {
                             return null;
                         }
